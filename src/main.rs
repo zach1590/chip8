@@ -1,11 +1,11 @@
-use std::io;
-use std::io::prelude::*;
-use std::fs::File;
+use std::fs;
 
 fn main() {
-    let mut file = File::open("programs/Pong.ch8").unwrap();
+    let filename = "programs/Pong.ch8";
     let mut ch8: Cpu = Cpu::new();
-    ch8.display_program_opcodes(&mut file);
+
+    let program_instructions = ch8.get_program_opcodes(filename);
+    ch8.display_program_opcodes(&program_instructions);
 }
 
 struct Cpu {
@@ -35,35 +35,50 @@ impl Cpu {
         };
     }
 
-    fn display_program_opcodes(self: &Cpu, file: &mut File){
-        // opcodes is of type [u8] (2 bytes represents an opcode)
-        let mut opcodes = [0; 2];
-        
-        while file.read(&mut opcodes[..]).unwrap() > 0 {
-            println!("{:02X}{:02X}", &opcodes[0], &opcodes[1]);
-            let digit0 = ((opcodes[0]) & 0xF0) >> 4;
-            let digit1 = (opcodes[0]) & 0x0F;
-            if 0x2 == digit0 { 
+    fn get_program_opcodes(self: &Cpu, file: &str) -> Vec<Opcode> {
+
+        let program_bytes = fs::read(file).unwrap();
+        let mut program_opcodes: Vec<Opcode> = Vec::new(); 
+        let mut i = 0;
+
+        while i < program_bytes.len() {
+            program_opcodes.push(Opcode::new(&program_bytes[i..=i+1]));
+            i += 2;
+        }
+        return program_opcodes;
+    }
+
+    fn display_program_opcodes(self: &Self, program: &Vec<Opcode>) {
+        for op in program {
+            op.display();
+            if 0x2 == op.digits[0] { 
                 println!("First Digit is 2");
             }
-            if 0x2 == digit1 { 
+            if 0x2 == op.digits[1] { 
                 println!("Second Digit is 2");
             }
         }
     }
 }
 
-/*
-    Idea for handling opcodes without converting and storing in Hex
-    let mut opcodes = [0; 2];
-    file.read(&mut opcodes[..]).unwrap();
-    
-    // Gets the 4 hexadecimal digits on their own
-    let digit0 = ((opcodes[0]) & 0xF0) >> 4;
-    let digit1 = ((opcodes[0]) & 0x0F);
-    let digit2 = ((opcodes[1]) & 0xF0) >> 4;
-    let digit3 = ((opcodes[1]) & 0x0F);
+struct Opcode {
+    digits: [u8; 4],
+}
 
-    if 0x2 == digit0 && 0x2 == digit1 { }
+impl Opcode {
+    fn new(opcode: &[u8]) -> Opcode {
+        return Opcode {
+            digits: [
+                ((opcode[0]) & 0xF0) >> 4,
+                (opcode[0]) & 0x0F,
+                ((opcode[1]) & 0xF0) >> 4,
+                (opcode[1]) & 0x0F,
+            ]
+        };
+    }
 
-*/
+    fn display(self: &Self){
+        println!("{:01X}{:01X}{:01X}{:01X}", 
+                    self.digits[0], self.digits[1], self.digits[2], self.digits[3]);
+    }
+}
