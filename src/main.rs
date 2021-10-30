@@ -1,7 +1,7 @@
 use std::fs;
 
 fn main() {
-    let filename = "programs/Pong.ch8";
+    let filename = "programs/Breakout.ch8";
     let mut ch8: Cpu = Cpu::new();
 
     let program_instructions = ch8.get_program_opcodes(filename);
@@ -50,12 +50,31 @@ impl Cpu {
 
     fn display_program_opcodes(self: &Self, program: &Vec<Opcode>) {
         for op in program {
-            op.display();
-            if 0x2 == op.digits[0] { 
-                println!("First Digit is 2");
-            }
-            if 0x2 == op.digits[1] { 
-                println!("Second Digit is 2");
+            self.execute(&op);
+        }
+    }
+
+    fn execute(self: &Self, op: &Opcode) {
+        match op.digits[0] {
+            0x0 => {
+                match op.digits[3] {
+                    0x0 => {
+                        print!("Clears the Screen: ");
+                        op.display();
+                    },
+                    0xE => {
+                        print!("Return from Subroutine: ");
+                        op.display();
+                    },
+                    _ => {
+                        print!("Not neccessary for most ROMs: ");
+                        op.display();
+                    }
+                }
+            },
+            _ => {
+                print!("Not yet supported: ");
+                op.display();
             }
         }
     }
