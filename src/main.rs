@@ -1,4 +1,5 @@
 use std::fs;
+use rand::Rng;
 
 fn main() {
     let filename = "programs/Pong.ch8";
@@ -61,7 +62,7 @@ impl Cpu {
     fn execute(self: &mut Self, op: &Opcode) {
         
         // Do I need to increment the instruction/program counter here ???
-
+        
         match op.digits[0] {
             0x0 => {
                 match op.digits[1..=3] {
@@ -75,7 +76,7 @@ impl Cpu {
                     [0x0, 0xE, 0xE] => {
                         print!("Return from Subroutine: ");
                         //self.stack_counter -= 1;
-                        self.address_register = self.stack[self.stack_counter];
+                        self.program_counter = self.stack[self.stack_counter];
                         self.stack[self.stack_counter] = 0;
                         op.display();
                     },
@@ -87,21 +88,21 @@ impl Cpu {
             },
             0x1 => {
                 // Jump to address NNN from Opcode 1NNN
-                self.address_register = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
-                print!("address_register: {:04X}", self.address_register);
+                self.program_counter = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
+                print!("program_counter: {:04X}", self.program_counter);
                 print!(" - Jump to address 1NNN: ");               
                 op.display();
             },
             0x2 => {
                 // Calls subroutine at NNN from Opcode 2NNN
-                // Push current address_register so we know where the subroutine was called from
-                self.stack[self.stack_counter] = self.address_register;  
+                // Push current program_counter so we know where the subroutine was called from
+                self.stack[self.stack_counter] = self.program_counter;  
                 self.stack_counter += 1;
 
-                // Set the address_register to where we need to go for the subroutine
-                self.address_register = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
+                // Set the program_counter to where we need to go for the subroutine
+                self.program_counter = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
 
-                print!("address_register: {:04X}", self.address_register);
+                print!("program_counter: {:04X}", self.program_counter);
                 print!(" - Call subroutine at 2NNN: ");               
                 op.display();
             },
@@ -111,11 +112,11 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 if self.registers[x] == nn {
-                    print!("Skipping instruction: {:04X} - Opcode: ", self.address_register);
-                    self.address_register += 2;      // instructions are 2 bytes
+                    print!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    self.program_counter += 2;      // instructions are 2 bytes
                 }
                 else {
-                    print!("Not Skipping instruction: {:04X} - Opcode: ", self.address_register);
+                    print!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
                 op.display();
             },
@@ -125,11 +126,11 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 if self.registers[x] != nn {
-                    print!("Skipping instruction: {:04X} - Opcode: ", self.address_register);
-                    self.address_register += 2;      // instructions are 2 bytes
+                    print!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    self.program_counter += 2;      // instructions are 2 bytes
                 }
                 else {
-                    print!("Not Skipping instruction: {:04X} - Opcode: ", self.address_register);
+                    print!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
                 op.display();
             },
@@ -139,11 +140,11 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let y = usize::from(op.digits[2]);
                 if self.registers[x] == self.registers[y] {
-                    print!("Skipping instruction: {:04X} - Opcode: ", self.address_register);
-                    self.address_register += 2;      // instructions are 2 bytes
+                    print!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    self.program_counter += 2;      // instructions are 2 bytes
                 }
                 else {
-                    print!("Not Skipping instruction: {:04X} - Opcode: ", self.address_register);
+                    print!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
                 op.display();
             },
@@ -201,22 +202,71 @@ impl Cpu {
                         let regx = self.registers[usize::from(x)];
                         let regy = self.registers[usize::from(y)];
                         let (result, _) = regx.overflowing_sub(regy);   // May not be correct
-                        self.registers[0xF] = u8::from(regx > regy);    // 1 when no borrow, video did differently    
+                        self.registers[0xF] = u8::from(regx > regy);    // 1 when no borrow  
                         self.registers[usize::from(x)] = result as u8;
 
                         print!("register[{}] - registers[{}] flag: {} - ", x, y, self.registers[0xF]);
                     },
-                    [x, y, 0x6] => {
+                    [x, _y, 0x6] => {
                         // If LSB of reg[X] is 1, then reg[F] = 1 otherwise 0, then divide reg[X] by 2
+                        self.registers[0xF] = self.registers[usize::from(x)] & 0x01;
+                        self.registers[usize::from(x)] = self.registers[usize::from(x)] >> 1;
+                        print!("Set flag to LSB: {} and divided by 2 - ", self.registers[0xF]);
+                    },
+                    [x, y, 0x7] => {
+                        // Set register[x] to register[y] - register[x], set flag if underflow
                         let regx = self.registers[usize::from(x)];
-                        self.registers[0xF] = regx & 0x01;
-                        self.registers[usize::from(x)] = regx >> 1;
-                        print!("register[{}] - registers[{}] flag: {} - ", x, y, self.registers[0xF]);
+                        let regy = self.registers[usize::from(y)];
+                        let (result, _) = regy.overflowing_sub(regx);   // May not be correct
+                        self.registers[0xF] = u8::from(regy > regx);    // 1 when no borrow
+                        self.registers[usize::from(x)] = result as u8;
+
+                        print!("register[{}] - registers[{}] flag: {} - ", y, x, self.registers[0xF]);
+                    },
+                    [x, _y, 0xE] => {
+                        // If MSB of reg[X] is 1, then reg[F] = 1 otherwise 0, then multiply reg[X] by 2
+                        self.registers[0xF] = (self.registers[usize::from(x)] >> 7) & 0x01;
+                        self.registers[usize::from(x)] = self.registers[usize::from(x)] << 1;
+                        print!("Set flag to MSB: {} and multiplied by 2 - ", self.registers[0xF]);
                     },
                     _ => {
                         print!("Opcode does not exist in spec - ");
                     }
                 }
+                op.display();
+            },
+            0x9 => {
+                // Opcode represents 9XY0
+                // Skips next instruction if registers[X] != registers[Y]
+                let x = usize::from(op.digits[1]);
+                let y = usize::from(op.digits[2]);
+                if self.registers[x] != self.registers[y] {
+                    print!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    self.program_counter += 2;      // instructions are 2 bytes
+                }
+                else {
+                    print!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                }
+                op.display();
+            },
+            0xA => {
+                // Opcode is ANNN, set addr register to NNN
+                self.address_register = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
+                print!("Set Address Register: {:04X}", self.address_register);
+                op.display();
+            },
+            0xB => {
+                // Opcode is BNNN, jump to NNN + reg[0]
+                let reg0 = u16::from(self.registers[0]);
+                self.program_counter = ((op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3]) + reg0;
+                print!("Jump! Program Counter: {:04X}", self.program_counter);
+                op.display();
+            },
+            0xC => {
+                // Opcode is CXKK, set reg[X] to random byte AND KK
+                let kk = ((op.digits[2] << 4) | op.digits[3]) as u8;
+                self.registers[usize::from(op.digits[1])] = kk & random_byte();
+                print!("Jump! Program Counter: {:04X}", self.program_counter);
                 op.display();
             },
             _ => {
@@ -247,4 +297,10 @@ impl Opcode {
         println!("{:01X}{:01X}{:01X}{:01X}", 
                     self.digits[0], self.digits[1], self.digits[2], self.digits[3]);
     }
+}
+
+fn random_byte() -> u8 {
+    let mut rng = rand::thread_rng();
+    let n1: u8 = rng.gen();
+    return n1;
 }
