@@ -1,7 +1,7 @@
 use std::fs;
 
 fn main() {
-    let filename = "programs/Breakout.ch8";
+    let filename = "programs/Pong.ch8";
     let mut ch8: Cpu = Cpu::new();
 
     let program_instructions = ch8.get_program_opcodes(filename);
@@ -25,9 +25,9 @@ impl Cpu {
         return Cpu {
             memory: [0; 4096],
             registers: [0; 16],
-            program_counter: 0,
-            stack: [0; 24],
-            stack_counter: 0,
+            program_counter: 0,             // Current memory location
+            stack: [0; 24],                 // Write a stack class? YES
+            stack_counter: 0,               // Current stack level
             delay_timer: 0,
             sound_timer: 0,
             keyboard: 0,
@@ -48,22 +48,28 @@ impl Cpu {
         return program_opcodes;
     }
 
-    fn display_program_opcodes(self: &Self, program: &Vec<Opcode>) {
+    fn display_program_opcodes(self: &mut Self, program: &Vec<Opcode>) {
         for op in program {
             self.execute(&op);
         }
     }
 
-    fn execute(self: &Self, op: &Opcode) {
+    fn execute(self: &mut Self, op: &Opcode) {
         match op.digits[0] {
             0x0 => {
-                match op.digits[3] {
-                    0x0 => {
+                match op.digits[1..=3] {
+                    [0x0, 0xE, 0x0] => {
                         print!("Clears the Screen: ");
+                        for i in 0..self.display.len() {
+                            self.display[i] = 0;
+                        }
                         op.display();
                     },
-                    0xE => {
+                    [0x0, 0xE, 0xE] => {
                         print!("Return from Subroutine: ");
+                        //self.stack_counter -= 1;
+                        self.program_counter = self.stack[usize::from(self.stack_counter)];
+                        self.stack[usize::from(self.stack_counter)] = 0;
                         op.display();
                     },
                     _ => {
