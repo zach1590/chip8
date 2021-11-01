@@ -20,8 +20,9 @@ struct Cpu {
     stack_counter: usize,
     delay_timer: u8,
     sound_timer: u8,
-    keyboard: u8,           // Only need 16 keys so this is overkill (only need the lowest four bits)
-    display: [u64; 32]      // [[u8; 64]; 32]
+    keyboard: u16,              // Each bit will represent a key (16 keys)
+    waiting_for_key: bool,
+    display: [u8; 64 * 32]      // Each byte represent a pixel (Supposed to be 1 bit = 1 pixel)
 }
 
 impl Cpu {
@@ -36,7 +37,8 @@ impl Cpu {
             delay_timer: 0,
             sound_timer: 0,
             keyboard: 0,
-            display: [0; 32],
+            waiting_for_key: false,
+            display: [0; 64*32],
         };
     }
 
@@ -63,6 +65,8 @@ impl Cpu {
         
         // Do I need to increment the instruction/program counter here ???
         
+
+
         match op.digits[0] {
             0x0 => {
                 match op.digits[1..=3] {
@@ -266,7 +270,111 @@ impl Cpu {
                 // Opcode is CXKK, set reg[X] to random byte AND KK
                 let kk = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 self.registers[usize::from(op.digits[1])] = kk & random_byte();
-                print!("Jump! Program Counter: {:04X}", self.program_counter);
+                print!("Set register[x] based on random byte - ");
+                op.display();
+            },
+            0xD => {
+                // Opcode is DXYN, Display N-byte sprite starting at address_register
+                // Place the sprite starting from reg[X], reg[Y] and set reg[F]=1 if any bit is erased
+                let i = usize::from(self.address_register);
+                let n = usize::from(op.digits[3]);
+                let x = usize::from(self.registers[usize::from(op.digits[1])]);
+                let y = usize::from(self.registers[usize::from(op.digits[2])]);
+                let sprite = &self.memory[i..i+n];
+
+                let mut pixel;                                              // Pixel for sprite
+                let mut collisions = 0x00;                                  // Initially no pixels have been erased yet
+                let mut pos;                                                // For indexing the display array
+                for (idy, byte) in sprite.iter().enumerate() {              // Each byte goes on next row of display
+                    for idx in 0..8 {                                       
+                        pixel = *byte >> ((7 - idx) & 0x1);                  // Get each bit of the byte
+                        pos = (64 * (y + idy)) + x + idx;
+                        collisions |= u8::from((pixel == 1) && (self.display[pos] == 1));
+                        self.display[pos] ^= pixel;                         // We display through XOR
+                    }
+                }
+                self.registers[0xF] = collisions;
+                print!("Updated the display, Collision Flag: {} - ", collisions);
+                op.display();
+            },
+            0xE => {
+                match op.digits[1..=3] {
+                    [x, 0x9, 0xE] => {
+                        // If key with value reg[x] is pressed, skip next instruction
+                        let regx = self.registers[usize::from(x)];
+                        if ((self.keyboard >> regx) & 0x01) == 1 {
+                            self.program_counter += 2;
+                        }
+                        print!("x: {:02X} Key: {:02X} is pressed so we skip instruction - ", x, regx);
+                    },
+                    [x, 0xA, 0x1] => {
+                        // If key with value reg[x] is NOT pressed, skip next instruction
+                        let regx = self.registers[usize::from(x)];
+                        if ((self.keyboard >> regx) & 0x01) != 1 {
+                            self.program_counter += 2;
+                        }
+                        print!("x: {:02X} Key: {:02X} is not pressed so we skip instruction - ", x, regx);
+                    },
+                    _ => {
+                        print!("Doesnt exist in the spec: ");
+                    },
+                }
+                op.display();
+            },
+            0xF => {
+                match op.digits[1..=3] {
+                    [x, 0x0, 0x7] => {
+                        self.registers[usize::from(x)] = self.delay_timer;
+                    },
+                    [x, 0x0, 0xA] => {
+                        self.waiting_for_key = true;
+                        if self.waiting_for_key {
+                            let keypress = 0;   // take in a keypress here
+                            self.keyboard = self.keyboard | (0x01 << keypress);
+                            self.registers[usize::from(x)] = 0x01 << keypress;
+                            self.waiting_for_key = false;
+                        }
+                    },
+                    [x, 0x1, 0x5] => {
+                        self.delay_timer = self.registers[usize::from(x)];
+                    },
+                    [x, 0x1, 0x8] => {
+                        self.sound_timer = self.registers[usize::from(x)];
+                    },
+                    [x, 0x1, 0xE] => {
+                        self.address_register += u16::from(self.registers[usize::from(x)]);
+                    },
+                    [x, 0x2, 0x9] => {
+                        // Set I to location of sprite for digit reg[x]
+                        // if reg[x] = 1, we want the sprite for 1
+                        // Each sprite is 5 bytes long and they begin at mem location 0x0000
+                        self.address_register = u16::from(self.registers[usize::from(x)]) * 5;
+                    },
+                    [x, 0x3, 0x3] => {
+                        let i = usize::from(self.address_register);
+                        let value = self.registers[usize::from(x)];
+                        self.memory[i] = (value / 100) as u8;                   // The hundreds digit of reg[x]
+                        self.memory[i + 1] = ((value % 100) / 10) as u8;        // The tens digit of reg[x]
+                        self.memory[i + 2] = (value % 10) as u8;                // The ones digit of reg[x]
+                    },
+                    [x, 0x5, 0x5] => {
+                        let i = usize::from(self.address_register);
+                        let xpos = usize::from(x);
+                        for pos in 0..=xpos {
+                            self.memory[i + pos] = self.registers[pos];
+                        }
+                    },
+                    [x, 0x6, 0x5] => {
+                        let i = usize::from(self.address_register);
+                        let xpos = usize::from(x);
+                        for pos in 0..=xpos {
+                            self.registers[pos] = self.memory[i + pos];
+                        } 
+                    },
+                    _ => {
+                        print!("Doesnt exist in the spec: ");
+                    },
+                }
                 op.display();
             },
             _ => {
