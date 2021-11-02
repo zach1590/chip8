@@ -1,14 +1,17 @@
 use std::fs;
 use rand::Rng;
+use console_engine::pixel;
+use console_engine::KeyCode;
+use std::time::{Duration, Instant};
 
 fn main() {
-    let filename = "programs/heart_monitor.ch8";
+    let filename = "programs/PONG2";
     let mut ch8: Cpu = Cpu::new();
 
     ch8.load_program(filename);
+    ch8.load_sprites();
     ch8.run_program();
-
-
+    
     //ch8.display_program_opcodes();
     //println!("num of opcodes {}", program_instructions.len());
 }
@@ -26,6 +29,8 @@ struct Cpu {
     waiting_for_key: bool,
     display: [u8; 64 * 32],      // Each byte represent a pixel (Supposed to be 1 bit = 1 pixel)
     prog_length: usize,
+    draw_flag: u8,
+    last_time: Instant,
 }
 
 impl Cpu {
@@ -43,7 +48,33 @@ impl Cpu {
             waiting_for_key: false,
             display: [0; 64*32],
             prog_length: 0,
+            draw_flag: 0,
+            last_time: Instant::now(),
         };
+    }
+
+    fn load_sprites(self: &mut Cpu) {
+        let sprites: [u8; 80] = [
+            0xF0, 0x90, 0x90, 0x90, 0xF0,     // 0
+            0x20, 0x60, 0x20, 0x20, 0x70,     // 1
+            0xF0, 0x10, 0xF0, 0x80, 0xF0,     // 2
+            0xF0, 0x10, 0xF0, 0x10, 0xF0,     // 3
+            0x90, 0x90, 0xF0, 0x10, 0x10,     // 4
+            0xF0, 0x80, 0xF0, 0x10, 0xF0,     // 5
+            0xF0, 0x80, 0xF0, 0x90, 0xF0,     // 6
+            0xF0, 0x10, 0x20, 0x40, 0x40,     // 7
+            0xF0, 0x90, 0xF0, 0x90, 0xF0,     // 8
+            0xF0, 0x90, 0xF0, 0x10, 0xF0,     // 9
+            0xF0, 0x90, 0xF0, 0x90, 0x90,     // A
+            0xE0, 0x90, 0xE0, 0x90, 0xE0,     // B
+            0xF0, 0x80, 0x80, 0x80, 0xF0,     // C
+            0xE0, 0x90, 0x90, 0x90, 0xE0,     // D
+            0xF0, 0x80, 0xF0, 0x80, 0xF0,     // E
+            0xF0, 0x80, 0xF0, 0x80, 0x80,     // F
+        ];
+        for (i, byte) in sprites.iter().enumerate() {
+            self.memory[i] = *byte;
+        }
     }
 
     fn load_program(self: &mut Cpu, file: &str) {
@@ -66,20 +97,58 @@ impl Cpu {
         }
     }
 
+    fn draw(self: &mut Self, engine: &mut console_engine::ConsoleEngine) {
+        engine.clear_screen();
+        let mut pos;
+        for x in 0..64 as i32 {
+            for y in 0..32 as i32{
+                pos = ((64 * y) + x) as usize;
+                if self.display[pos] == 1 {
+                    engine.set_pxl(x, y, pixel::pxl('*'));
+                }
+                else {
+                    engine.set_pxl(x, y, pixel::pxl(' '));
+                }
+            }
+        }
+        engine.draw();
+    }
+
     fn run_program(self: &mut Self) {
-        
+
+        let mut engine = console_engine::ConsoleEngine::init(64, 32, 60).unwrap();
         let mut opcode;
+        self.last_time = Instant::now();
+
         while (self.program_counter >= 512) && (self.program_counter <= (512 + self.prog_length as u16)) {
+            
             let array: [u8; 2] = [
                     self.memory[usize::from(self.program_counter)],
                     self.memory[usize::from(self.program_counter) + 1]
                 ];
             opcode = Opcode::new(&array);
             self.execute(&opcode);
+            
+            if self.draw_flag == 1 {
+                engine.wait_frame();        // Pressing keys work but is now slow
+                if engine.is_key_pressed(KeyCode::Char('q')) { // if the user presses 'q' :
+                    break; // exits app
+                }
+                self.draw(&mut engine);
+                self.draw_flag = 0;
+            }
         }
     }
 
     fn execute(self: &mut Self, op: &Opcode) {
+
+        let new_time = Instant::now();
+        let elasped_time = new_time.duration_since(self.last_time);
+        if  elasped_time.as_millis() > 16 {                                 // 1/60hz is 16.6666ms
+            self.last_time = new_time;
+            if self.delay_timer > 0 { self.delay_timer -= 1; }
+            if self.sound_timer > 0 { self.sound_timer -= 1; }
+        }
 
         self.program_counter += 2;
 
@@ -87,28 +156,29 @@ impl Cpu {
             0x0 => {
                 match op.digits[1..=3] {
                     [0x0, 0xE, 0x0] => {
-                        println!("Clears the Screen: ");
+                        //println!("Clears the Screen: ");
                         for i in 0..self.display.len() {
                             self.display[i] = 0;
                         }
+                        self.draw_flag = 1;
                     },
                     [0x0, 0xE, 0xE] => {
-                        println!("Return from Subroutine: ");
+                        //println!("Return from Subroutine: ");
                         self.stack_counter -= 1;
                         self.program_counter = self.stack[self.stack_counter];
                         self.stack[self.stack_counter] = 0;
                     },
                     _ => {
-                        print!("Not neccessary for most ROMs: ");
-                        op.display();
+                        //print!("Not neccessary for most ROMs: ");
+                        //op.display();
                     }
                 }
             },
             0x1 => {
                 // Jump to address NNN from Opcode 1NNN
                 self.program_counter = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
-                print!("program_counter: {:04X}", self.program_counter);
-                println!(" - Jump to address 1NNN: ");
+                //print!("program_counter: {:04X}", self.program_counter);
+                //println!(" - Jump to address 1NNN: ");
             },
             0x2 => {
                 // Calls subroutine at NNN from Opcode 2NNN
@@ -119,8 +189,8 @@ impl Cpu {
                 // Set the program_counter to where we need to go for the subroutine
                 self.program_counter = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
 
-                print!("program_counter: {:04X}", self.program_counter);
-                println!(" - Call subroutine at 2NNN: ");
+                //print!("program_counter: {:04X}", self.program_counter);
+                //println!(" - Call subroutine at 2NNN: ");
             },
             0x3 => {
                 // Opcode represents 3XNN
@@ -128,11 +198,11 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 if self.registers[x] == nn {
-                    println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2; // instructions are 2 bytes
                 }
                 else {
-                    println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0x4 => {
@@ -141,11 +211,11 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 if self.registers[x] != nn {
-                    println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2;
                 }
                 else {
-                    println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0x5 => {
@@ -154,11 +224,11 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let y = usize::from(op.digits[2]);
                 if self.registers[x] == self.registers[y] {
-                    println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2;      // instructions are 2 bytes
                 }
                 else {
-                    println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0x6 => {
@@ -166,37 +236,37 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 self.registers[x] = nn;
-                println!("Setting register[{}] to {:02X} - ", x, nn);
+                //println!("Setting register[{}] to {:02X} - ", x, nn);
             },
             0x7 => {
                 // 7XNN where we set registers[X] = registers[X] + NN, do not set carry flag
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u16;
                 let xnn = u16::from(self.registers[x]) + nn;            // Rust panics due to overflow
-                self.registers[x] = xnn as u8;                          // So we just truncate afterwards instead
-                println!("Adding {:02X} to register[{}] - ", nn, x);
+                self.registers[x] = (xnn & 0x00FF) as u8;               // So we just truncate afterwards instead
+                //println!("Adding {:02X} to register[{}] - ", nn, x);
             },
             0x8 => {
                 match op.digits[1..=3] {
                     [x, y, 0x0] => {
                         // Set register[x] to register[y]
                         self.registers[usize::from(x)] = self.registers[usize::from(y)];
-                        println!("Setting register[{}] to registers[{}] - ", x, y);
+                        //println!("Setting register[{}] to registers[{}] - ", x, y);
                     },
                     [x, y, 0x1] => {
                         // Set register[x] to register[x] OR register[y]
                         self.registers[usize::from(x)] |= self.registers[usize::from(y)];
-                        println!("OR operation on register[{}] with registers[{}] - ", x, y);
+                        //println!("OR operation on register[{}] with registers[{}] - ", x, y);
                     },
                     [x, y, 0x2] => {
                         // Set register[x] to register[x] AND register[y]
                         self.registers[usize::from(x)] &= self.registers[usize::from(y)];
-                        println!("AND operation on register[{}] with registers[{}] - ", x, y);
+                        //println!("AND operation on register[{}] with registers[{}] - ", x, y);
                     },
                     [x, y, 0x3] => {
                         // Set register[x] to register[x] XOR register[y]
                         self.registers[usize::from(x)] ^= self.registers[usize::from(y)];
-                        println!("XOR operation on register[{}] with registers[{}] - ", x, y);
+                        //println!("XOR operation on register[{}] with registers[{}] - ", x, y);
                     },
                     [x, y, 0x4] => {
                         // Set register[x] to register[x] + register[y], set carry if needed
@@ -206,7 +276,7 @@ impl Cpu {
                         self.registers[0xF] = u8::from(result > 255);
                         self.registers[usize::from(x)] = result as u8;  // When it overflows, the result would be useless?                   
                         
-                        println!("register[{}] + registers[{}] flag: {} - ", x, y, self.registers[0xF]);
+                        //println!("register[{}] + registers[{}] flag: {} - ", x, y, self.registers[0xF]);
                     },
                     [x, y, 0x5] => {
                         // Set register[x] to register[x] - register[y], set flag if underflow
@@ -216,13 +286,13 @@ impl Cpu {
                         self.registers[0xF] = u8::from(regx > regy);    // 1 when no borrow  
                         self.registers[usize::from(x)] = result as u8;
 
-                        println!("register[{}] - registers[{}] flag: {} - ", x, y, self.registers[0xF]);
+                        //println!("register[{}] - registers[{}] flag: {} - ", x, y, self.registers[0xF]);
                     },
                     [x, _y, 0x6] => {
                         // If LSB of reg[X] is 1, then reg[F] = 1 otherwise 0, then divide reg[X] by 2
                         self.registers[0xF] = self.registers[usize::from(x)] & 0x01;
                         self.registers[usize::from(x)] = self.registers[usize::from(x)] >> 1;
-                        println!("Set flag to LSB: {} and divided by 2 - ", self.registers[0xF]);
+                        //println!("Set flag to LSB: {} and divided by 2 - ", self.registers[0xF]);
                     },
                     [x, y, 0x7] => {
                         // Set register[x] to register[y] - register[x], set flag if underflow
@@ -232,17 +302,17 @@ impl Cpu {
                         self.registers[0xF] = u8::from(regy > regx);    // 1 when no borrow
                         self.registers[usize::from(x)] = result as u8;
 
-                        println!("register[{}] - registers[{}] flag: {} - ", y, x, self.registers[0xF]);
+                        //println!("register[{}] - registers[{}] flag: {} - ", y, x, self.registers[0xF]);
                     },
                     [x, _y, 0xE] => {
                         // If MSB of reg[X] is 1, then reg[F] = 1 otherwise 0, then multiply reg[X] by 2
                         self.registers[0xF] = (self.registers[usize::from(x)] >> 7) & 0x01;
                         self.registers[usize::from(x)] = self.registers[usize::from(x)] << 1;
-                        println!("Set flag to MSB: {} and multiplied by 2 - ", self.registers[0xF]);
+                        //println!("Set flag to MSB: {} and multiplied by 2 - ", self.registers[0xF]);
                     },
                     _ => {
-                        print!("Opcode does not exist in spec - ");
-                        op.display();
+                        //print!("Opcode does not exist in spec - ");
+                        //op.display();
                     }
                 }
             },
@@ -252,29 +322,29 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let y = usize::from(op.digits[2]);
                 if self.registers[x] != self.registers[y] {
-                    println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2;      // instructions are 2 bytes
                 }
                 else {
-                    println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
+                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0xA => {
                 // Opcode is ANNN, set addr register to NNN
                 self.address_register = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
-                println!("Set Address Register: {:04X}", self.address_register);
+                //println!("Set Address Register: {:04X}", self.address_register);
             },
             0xB => {
                 // Opcode is BNNN, jump to NNN + reg[0]
                 let reg0 = u16::from(self.registers[0]);
                 self.program_counter = ((op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3]) + reg0;
-                println!("Jump! Program Counter: {:04X}", self.program_counter);
+                //println!("Jump! Program Counter: {:04X}", self.program_counter);
             },
             0xC => {
                 // Opcode is CXKK, set reg[X] to random byte AND KK
                 let kk = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 self.registers[usize::from(op.digits[1])] = kk & random_byte();
-                println!("Set register[x] based on random byte - ");
+                //println!("Set register[x] based on random byte - ");
             },
             0xD => {
                 // Opcode is DXYN, Display N-byte sprite starting at address_register
@@ -283,21 +353,28 @@ impl Cpu {
                 let n = usize::from(op.digits[3]);
                 let x = usize::from(self.registers[usize::from(op.digits[1])]);
                 let y = usize::from(self.registers[usize::from(op.digits[2])]);
-                let sprite = &self.memory[i..i+n];
-
-                let mut pixel;                                              // Pixel for sprite
-                let mut collisions = 0x00;                                  // Initially no pixels have been erased yet
+                
+                let mut bit;                                                // Pixel for sprite
+                self.registers[15] = 0;                                     // Initially no pixels have been erased yet
                 let mut pos;                                                // For indexing the display array
-                for (idy, byte) in sprite.iter().enumerate() {              // Each byte goes on next row of display
-                    for idx in 0..8 {                                       
-                        pixel = *byte >> ((7 - idx) & 0x1);                  // Get each bit of the byte
-                        pos = (64 * (y + idy)) + x + idx;
-                        collisions |= u8::from((pixel == 1) && (self.display[pos] == 1));
-                        self.display[pos] ^= pixel;                         // We display through XOR
+                for idy in 0..n {
+
+                    let byte: u8 = self.memory[i + idy];
+                    for idx in 0..8 {
+
+                        bit = (byte >> (7 - idx)) & 0x01;
+                        pos = x + idx + (y + idy)*64;
+                        if pos > 2047 {
+                            continue;
+                        }
+                        if (bit == 1) && (self.display[pos] == 1){
+                            self.registers[15] = 1;
+                        }
+                        self.display[pos] = self.display[pos] ^ bit;
                     }
                 }
-                self.registers[0xF] = collisions;
-                println!("Updated the display, Collision Flag: {} - ", collisions);
+                self.draw_flag = 1;
+                //println!("Updated the display, Collision Flag: {} - ", collisions);
             },
             0xE => {
                 match op.digits[1..=3] {
@@ -307,7 +384,7 @@ impl Cpu {
                         if ((self.keyboard >> regx) & 0x01) == 1 {
                             self.program_counter += 2;
                         }
-                        println!("x: {:02X} Key: {:02X} is pressed so we skip instruction - ", x, regx);
+                        //println!("x: {:02X} Key: {:02X} is pressed so we skip instruction - ", x, regx);
                     },
                     [x, 0xA, 0x1] => {
                         // If key with value reg[x] is NOT pressed, skip next instruction
@@ -315,11 +392,11 @@ impl Cpu {
                         if ((self.keyboard >> regx) & 0x01) != 1 {
                             self.program_counter += 2;
                         }
-                        println!("x: {:02X} Key: {:02X} is not pressed so we skip instruction - ", x, regx);
+                        //println!("x: {:02X} Key: {:02X} is not pressed so we skip instruction - ", x, regx);
                     },
                     _ => {
-                        print!("Doesnt exist in the spec: ");
-                        op.display();
+                        //print!("Doesnt exist in the spec: ");
+                        //op.display();
                     },
                 }
             },
@@ -374,14 +451,14 @@ impl Cpu {
                         } 
                     },
                     _ => {
-                        print!("Doesnt exist in the spec: ");
-                        op.display();
+                        //print!("Doesnt exist in the spec: ");
+                        //op.display();
                     },
                 }
             },
             _ => {
-                print!("Not yet supported: ");
-                op.display();
+                //print!("Not yet supported: ");
+                //op.display();
             }
         }
     }

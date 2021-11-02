@@ -7,3 +7,5 @@ edition = "2018"
 
 [dependencies]
 rand = "0.8.4"
+console_engine = "2.1.0"
+sdl2 = "0.35"
