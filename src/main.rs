@@ -1,10 +1,18 @@
+extern crate sdl2;
+
 use std::fs;
 use rand::Rng;
-use console_engine::pixel;
-use console_engine::KeyCode;
+// use console_engine::pixel;
+// use console_engine::KeyCode;
 use std::time::{Duration, Instant};
+use sdl2::rect::Rect;
+
+use sdl2::pixels::{Color, PixelFormatEnum};
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
 
 fn main() {
+
     let filename = "programs/PONG2";
     let mut ch8: Cpu = Cpu::new();
 
@@ -86,58 +94,113 @@ impl Cpu {
         self.prog_length = program_bytes.len();
     }
 
-    fn display_program_opcodes(self: &mut Self) {
+    // fn display_program_opcodes(self: &mut Self) {
         
-        let mut i = 0;
-        let mut op;
-        while i < self.prog_length {
-            op = Opcode::new(&[self.memory[512 + i], self.memory[512 + i + 1]]);
-            op.display();
-            i += 2;
-        }
-    }
+    //     let mut i = 0;
+    //     let mut op;
+    //     while i < self.prog_length {
+    //         op = Opcode::new(&[self.memory[512 + i], self.memory[512 + i + 1]]);
+    //         op.display();
+    //         i += 2;
+    //     }
+    // }
 
-    fn draw(self: &mut Self, engine: &mut console_engine::ConsoleEngine) {
-        engine.clear_screen();
-        let mut pos;
-        for x in 0..64 as i32 {
-            for y in 0..32 as i32{
-                pos = ((64 * y) + x) as usize;
-                if self.display[pos] == 1 {
-                    engine.set_pxl(x, y, pixel::pxl('*'));
-                }
-                else {
-                    engine.set_pxl(x, y, pixel::pxl(' '));
-                }
-            }
-        }
-        engine.draw();
-    }
+    // fn draw(self: &mut Self, engine: &mut console_engine::ConsoleEngine) {
+    //     engine.clear_screen();
+    //     let mut pos;
+    //     for x in 0..64 as i32 {
+    //         for y in 0..32 as i32{
+    //             pos = ((64 * y) + x) as usize;
+    //             if self.display[pos] == 1 {
+    //                 engine.set_pxl(x, y, pixel::pxl('*'));
+    //             }
+    //             else {
+    //                 engine.set_pxl(x, y, pixel::pxl(' '));
+    //             }
+    //         }
+    //     }
+    //     engine.draw();
+    // }
 
     fn run_program(self: &mut Self) {
 
-        let mut engine = console_engine::ConsoleEngine::init(64, 32, 60).unwrap();
+        let sdl_context = sdl2::init().unwrap();
+        let video_subsystem = sdl_context.video().unwrap();
+
+        let window = video_subsystem.window("rust-sdl2 demo", 64*8, 32*8)
+            .position_centered()
+            .build()
+            .unwrap();
+
+        let mut canvas = window             // Canvas is the renderer
+            .into_canvas()
+            .accelerated()
+            .build()
+            .unwrap();     
+
+        let creator = canvas.texture_creator();
+        let mut texture = creator
+            .create_texture_streaming(PixelFormatEnum::RGB332, 64, 32)
+            .map_err(|e| e.to_string()).unwrap();
+
+        texture.set_color_mod(255, 255, 255);
+
+        let mut event_pump = sdl_context.event_pump().unwrap();
+        
         let mut opcode;
+        let mut oparray: [u8; 2];
         self.last_time = Instant::now();
 
-        while (self.program_counter >= 512) && (self.program_counter <= (512 + self.prog_length as u16)) {
-            
-            let array: [u8; 2] = [
+        'running: loop {
+
+            oparray = [
                     self.memory[usize::from(self.program_counter)],
                     self.memory[usize::from(self.program_counter) + 1]
-                ];
-            opcode = Opcode::new(&array);
+            ];
+            opcode = Opcode::new(&oparray);
             self.execute(&opcode);
-            
-            if self.draw_flag == 1 {
-                engine.wait_frame();        // Pressing keys work but is now slow
-                if engine.is_key_pressed(KeyCode::Char('q')) { // if the user presses 'q' :
-                    break; // exits app
+
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                        break 'running      // Specifies which loop to break from
+                    },
+                    _ => {}
                 }
-                self.draw(&mut engine);
+            }
+            // Update the display if needed
+            if self.draw_flag == 1 {
+                // draw 
+                canvas.clear();                                                 // Clear the buffer
+                texture.update(None, &(self.display), 64).unwrap();              // Update texture
+                canvas.copy(&texture, None, Some(Rect::new(0, 0, 64*8, 32*8))).unwrap();                     // Copy the texture into the canvas
+                canvas.present();                                               // Present canvas
                 self.draw_flag = 0;
             }
+            std::thread::sleep(Duration::new(0, 500));        // had :: at the start originally
         }
+
+
+        // let mut engine = console_engine::ConsoleEngine::init(64, 32, 60).unwrap();
+    
+        // while (self.program_counter >= 512) && (self.program_counter <= (512 + self.prog_length as u16)) {
+            
+        //     oparray = [
+        //             self.memory[usize::from(self.program_counter)],
+        //             self.memory[usize::from(self.program_counter) + 1]
+        //     ];
+        //     opcode = Opcode::new(&oparray);
+        //     self.execute(&opcode);
+            
+        //     if self.draw_flag == 1 {
+        //         engine.wait_frame();                                 
+        //         if engine.is_key_pressed(KeyCode::Char('q')) {       // if the user presses 'q' :
+        //             break; // exits app
+        //         }
+        //         self.draw(&mut engine);
+        //         self.draw_flag = 0;
+        //     }
+        // }
     }
 
     fn execute(self: &mut Self, op: &Opcode) {
@@ -488,7 +551,6 @@ impl Opcode {
 }
 
 fn random_byte() -> u8 {
-    let mut rng = rand::thread_rng();
-    let n1: u8 = rng.gen();
-    return n1;
+    let num = rand::thread_rng().gen_range(0..255);
+    return num;
 }
