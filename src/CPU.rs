@@ -188,17 +188,12 @@ impl Cpu {
                         self.program_counter = self.stack[self.stack_counter];
                         self.stack[self.stack_counter] = 0;
                     },
-                    _ => {
-                        //print!("Not neccessary for most ROMs: ");
-                        //op.display();
-                    }
+                    _ => { }
                 }
             },
             0x1 => {
                 // Jump to address NNN from Opcode 1NNN
                 self.program_counter = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
-                //print!("program_counter: {:04X}", self.program_counter);
-                //println!(" - Jump to address 1NNN: ");
             },
             0x2 => {
                 // Calls subroutine at NNN from Opcode 2NNN
@@ -208,9 +203,6 @@ impl Cpu {
 
                 // Set the program_counter to where we need to go for the subroutine
                 self.program_counter = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
-
-                //print!("program_counter: {:04X}", self.program_counter);
-                //println!(" - Call subroutine at 2NNN: ");
             },
             0x3 => {
                 // Opcode represents 3XNN
@@ -218,11 +210,7 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 if self.registers[x] == nn {
-                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2; // instructions are 2 bytes
-                }
-                else {
-                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0x4 => {
@@ -231,11 +219,7 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 if self.registers[x] != nn {
-                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2;
-                }
-                else {
-                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0x5 => {
@@ -244,11 +228,7 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let y = usize::from(op.digits[2]);
                 if self.registers[x] == self.registers[y] {
-                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2;      // instructions are 2 bytes
-                }
-                else {
-                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0x6 => {
@@ -256,7 +236,6 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 self.registers[x] = nn;
-                //println!("Setting register[{}] to {:02X} - ", x, nn);
             },
             0x7 => {
                 // 7XNN where we set registers[X] = registers[X] + NN, do not set carry flag
@@ -264,29 +243,24 @@ impl Cpu {
                 let nn = ((op.digits[2] << 4) | op.digits[3]) as u16;
                 let xnn = u16::from(self.registers[x]) + nn;            // Rust panics due to overflow
                 self.registers[x] = (xnn & 0x00FF) as u8;               // So we just truncate afterwards instead
-                //println!("Adding {:02X} to register[{}] - ", nn, x);
             },
             0x8 => {
                 match op.digits[1..=3] {
                     [x, y, 0x0] => {
                         // Set register[x] to register[y]
                         self.registers[usize::from(x)] = self.registers[usize::from(y)];
-                        //println!("Setting register[{}] to registers[{}] - ", x, y);
                     },
                     [x, y, 0x1] => {
                         // Set register[x] to register[x] OR register[y]
                         self.registers[usize::from(x)] |= self.registers[usize::from(y)];
-                        //println!("OR operation on register[{}] with registers[{}] - ", x, y);
                     },
                     [x, y, 0x2] => {
                         // Set register[x] to register[x] AND register[y]
                         self.registers[usize::from(x)] &= self.registers[usize::from(y)];
-                        //println!("AND operation on register[{}] with registers[{}] - ", x, y);
                     },
                     [x, y, 0x3] => {
                         // Set register[x] to register[x] XOR register[y]
                         self.registers[usize::from(x)] ^= self.registers[usize::from(y)];
-                        //println!("XOR operation on register[{}] with registers[{}] - ", x, y);
                     },
                     [x, y, 0x4] => {
                         // Set register[x] to register[x] + register[y], set carry if needed
@@ -294,9 +268,7 @@ impl Cpu {
                         let regy = u16::from(self.registers[usize::from(y)]);
                         let result = regx + regy;
                         self.registers[0xF] = u8::from(result > 255);
-                        self.registers[usize::from(x)] = result as u8;  // When it overflows, the result would be useless?                   
-                        
-                        //println!("register[{}] + registers[{}] flag: {} - ", x, y, self.registers[0xF]);
+                        self.registers[usize::from(x)] = result as u8;
                     },
                     [x, y, 0x5] => {
                         // Set register[x] to register[x] - register[y], set flag if underflow
@@ -305,14 +277,11 @@ impl Cpu {
                         let (result, _) = regx.overflowing_sub(regy);   // May not be correct
                         self.registers[0xF] = u8::from(regx > regy);    // 1 when no borrow  
                         self.registers[usize::from(x)] = result as u8;
-
-                        //println!("register[{}] - registers[{}] flag: {} - ", x, y, self.registers[0xF]);
                     },
                     [x, _y, 0x6] => {
                         // If LSB of reg[X] is 1, then reg[F] = 1 otherwise 0, then divide reg[X] by 2
                         self.registers[0xF] = self.registers[usize::from(x)] & 0x01;
                         self.registers[usize::from(x)] = self.registers[usize::from(x)] >> 1;
-                        //println!("Set flag to LSB: {} and divided by 2 - ", self.registers[0xF]);
                     },
                     [x, y, 0x7] => {
                         // Set register[x] to register[y] - register[x], set flag if underflow
@@ -321,19 +290,13 @@ impl Cpu {
                         let (result, _) = regy.overflowing_sub(regx);   // May not be correct
                         self.registers[0xF] = u8::from(regy > regx);    // 1 when no borrow
                         self.registers[usize::from(x)] = result as u8;
-
-                        //println!("register[{}] - registers[{}] flag: {} - ", y, x, self.registers[0xF]);
                     },
                     [x, _y, 0xE] => {
                         // If MSB of reg[X] is 1, then reg[F] = 1 otherwise 0, then multiply reg[X] by 2
                         self.registers[0xF] = (self.registers[usize::from(x)] >> 7) & 0x01;
                         self.registers[usize::from(x)] = self.registers[usize::from(x)] << 1;
-                        //println!("Set flag to MSB: {} and multiplied by 2 - ", self.registers[0xF]);
                     },
-                    _ => {
-                        //print!("Opcode does not exist in spec - ");
-                        //op.display();
-                    }
+                    _ => { }
                 }
             },
             0x9 => {
@@ -342,29 +305,22 @@ impl Cpu {
                 let x = usize::from(op.digits[1]);
                 let y = usize::from(op.digits[2]);
                 if self.registers[x] != self.registers[y] {
-                    //println!("Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                     self.program_counter += 2;      // instructions are 2 bytes
-                }
-                else {
-                    //println!("Not Skipping instruction: {:04X} - Opcode: ", self.program_counter);
                 }
             },
             0xA => {
                 // Opcode is ANNN, set addr register to NNN
                 self.address_register = (op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3];
-                //println!("Set Address Register: {:04X}", self.address_register);
             },
             0xB => {
                 // Opcode is BNNN, jump to NNN + reg[0]
                 let reg0 = u16::from(self.registers[0]);
                 self.program_counter = ((op.digits[1] << 8) | (op.digits[2] << 4) | op.digits[3]) + reg0;
-                //println!("Jump! Program Counter: {:04X}", self.program_counter);
             },
             0xC => {
                 // Opcode is CXKK, set reg[X] to random byte AND KK
                 let kk = ((op.digits[2] << 4) | op.digits[3]) as u8;
                 self.registers[usize::from(op.digits[1])] = kk & random_byte();
-                //println!("Set register[x] based on random byte - ");
             },
             0xD => {
                 // Opcode is DXYN, Display N-byte sprite starting at address_register
@@ -396,11 +352,9 @@ impl Cpu {
                         else {
                             self.display[pos] = self.display[pos] ^ 0x00;
                         }
-                        
                     }
                 }
                 self.draw_flag = 1;
-                //println!("Updated the display, Collision Flag: {} - ", collisions);
             },
             0xE => {
                 match op.digits[1..=3] {
@@ -410,7 +364,6 @@ impl Cpu {
                         if ((self.keyboard >> regx) & 0x01) == 1 {
                             self.program_counter += 2;
                         }
-                        //println!("x: {:02X} Key: {:02X} is pressed so we skip instruction - ", x, regx);
                     },
                     [x, 0xA, 0x1] => {
                         // If key with value reg[x] is NOT pressed, skip next instruction
@@ -418,12 +371,8 @@ impl Cpu {
                         if ((self.keyboard >> regx) & 0x01) != 1 {
                             self.program_counter += 2;
                         }
-                        //println!("x: {:02X} Key: {:02X} is not pressed so we skip instruction - ", x, regx);
                     },
-                    _ => {
-                        //print!("Doesnt exist in the spec: ");
-                        //op.display();
-                    },
+                    _ => { },
                 }
             },
             0xF => {
@@ -476,16 +425,10 @@ impl Cpu {
                             self.registers[pos] = self.memory[i + pos];
                         } 
                     },
-                    _ => {
-                        //print!("Doesnt exist in the spec: ");
-                        //op.display();
-                    },
+                    _ => { },
                 }
             },
-            _ => {
-                //print!("Not yet supported: ");
-                //op.display();
-            }
+            _ => { }
         }
     }
 }
