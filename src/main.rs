@@ -2,10 +2,11 @@ extern crate sdl2;
 mod CPU;
 mod keys;
 mod opcode;
+mod sound;
 
 fn main() {
 
-    let filename = "programs/PONG2";
+    let filename = "programs/BRIX";
     let mut ch8: CPU::Cpu = CPU::Cpu::new();
 
     ch8.load_program(filename);

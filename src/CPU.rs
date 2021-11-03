@@ -1,5 +1,7 @@
 use super::keys;
 use super::opcode::Opcode;
+use super::sound;
+use super::sound::SoundSystem;
 
 use std::time::{Duration, Instant};
 use sdl2::rect::Rect;
@@ -8,6 +10,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::fs;
 use rand::Rng;
+use sdl2::audio::{AudioCallback, AudioSpecDesired};
 
 pub struct Cpu {
     memory: [u8; 4096],
@@ -79,23 +82,12 @@ impl Cpu {
         self.prog_length = program_bytes.len();
     }
 
-    // fn display_program_opcodes(self: &mut Self) {
-        
-    //     let mut i = 0;
-    //     let mut op;
-    //     while i < self.prog_length {
-    //         op = Opcode::new(&[self.memory[512 + i], self.memory[512 + i + 1]]);
-    //         op.display();
-    //         i += 2;
-    //     }
-    // }
-
     pub fn run_program(self: &mut Self) {
 
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
 
-        let window = video_subsystem.window("rust-sdl2 demo", 64*8, 32*8)
+        let window = video_subsystem.window("Rust-Chip8-Emulator", 64*8, 32*8)
             .position_centered()
             .build()
             .unwrap();
@@ -112,6 +104,16 @@ impl Cpu {
             .map_err(|e| e.to_string()).unwrap();
 
         texture.set_color_mod(255, 255, 255);
+
+        let sound_system = sound::SoundSystem::initialize(&sdl_context);
+
+        // Start playback
+        sound_system.device.resume();
+        // Play for 0.2s
+        std::thread::sleep(Duration::from_millis(200));
+        // Stop Playing
+        sound_system.device.pause();
+
 
         let mut event_pump = sdl_context.event_pump().unwrap();
         
@@ -147,17 +149,14 @@ impl Cpu {
             }
             // Update the display if needed
             if self.draw_flag == 1 {
-
                 canvas.clear();                                                     // Clear the buffer
                 texture.update(None, &(self.display), 64).unwrap();                 // Update texture
-                // Copy the texture into the canvas
                 canvas.copy(&texture, None, Some(Rect::new(0, 0, 64*8, 32*8))).unwrap();   
                 canvas.present();
                 self.draw_flag = 0;
             }
             std::thread::sleep(Duration::new(0, 500));        // had :: at the start originally
         }
-
     }
 
     fn execute(self: &mut Self, op: &Opcode) {
