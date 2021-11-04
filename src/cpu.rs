@@ -1,30 +1,22 @@
-use super::keys;
 use super::opcode::Opcode;
-use super::sound::SoundSystem;
-
-use std::time::{Duration, Instant};
-use sdl2::rect::Rect;
-use sdl2::pixels::PixelFormatEnum;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 use std::fs;
 use rand::Rng;
+use std::time::Instant;
 
 pub struct Cpu {
-    memory: [u8; 4096],
-    registers: [u8; 16],        // v[] in the wiki
-    address_register: u16,      // I in the wiki
-    program_counter: u16,       // pc in the wiki
-    stack: [u16; 24],
-    stack_counter: usize,
-    delay_timer: u8,
-    sound_timer: u8,
-    keyboard: u16,              // Each bit will represent a key (16 keys)
-    waiting_for_key: bool,
-    display: [u8; 64 * 32],      // Each byte represent a pixel (Supposed to be 1 bit = 1 pixel)
-    prog_length: usize,
-    draw_flag: u8,
-    last_time: Instant,
+    pub memory: [u8; 4096],
+    pub registers: [u8; 16],        // v[] in the wiki
+    pub address_register: u16,      // I in the wiki
+    pub program_counter: u16,       // pc in the wiki
+    pub stack: [u16; 24],           // For subroutine calls
+    pub stack_counter: usize,
+    pub delay_timer: u8,
+    pub sound_timer: u8,
+    pub keyboard: u16,              // Each bit will represent a key (16 keys)
+    pub waiting_for_key: bool,
+    pub display: [u8; 64 * 32],      // Each byte represent a pixel (Supposed to be 1 bit = 1 pixel)       
+    pub draw_flag: u8,              // Do we need to draw on this interation
+    pub last_time: Instant,         // Keep track of time for the timers
 }
 
 impl Cpu {
@@ -41,7 +33,6 @@ impl Cpu {
             keyboard: 0,
             waiting_for_key: false,
             display: [0; 64*32],
-            prog_length: 0,
             draw_flag: 0,
             last_time: Instant::now(),
         };
@@ -77,80 +68,9 @@ impl Cpu {
         for (i, byte) in (&program_bytes).into_iter().enumerate(){
             self.memory[512 + i] = *byte;
         }
-        self.prog_length = program_bytes.len();
     }
 
-    pub fn run_program(self: &mut Self) {
-
-        let sdl_context = sdl2::init().unwrap();
-        let video_subsystem = sdl_context.video().unwrap();
-
-        let window = video_subsystem.window("Rust-Chip8-Emulator", 64*8, 32*8)
-            .position_centered()
-            .build()
-            .unwrap();
-
-        let mut canvas = window             // Canvas is the renderer
-            .into_canvas()
-            .accelerated()
-            .build()
-            .unwrap();     
-
-        let creator = canvas.texture_creator();
-        let mut texture = creator
-            .create_texture_streaming(PixelFormatEnum::RGB332, 64, 32)
-            .map_err(|e| e.to_string()).unwrap();
-
-        let mut sound_system = SoundSystem::initialize(&sdl_context);   // Init Sound System
-        sound_system.device.resume();
-
-        let mut event_pump = sdl_context.event_pump().unwrap();
-        
-        let mut opcode;
-        let mut oparray: [u8; 2];
-        self.last_time = Instant::now();
-
-        'running: loop {
-
-            sound_system.handle_timer(&self.sound_timer);
-            oparray = [
-                    self.memory[usize::from(self.program_counter)],
-                    self.memory[usize::from(self.program_counter) + 1]
-            ];
-            self.program_counter += 2;
-            opcode = Opcode::new(&oparray);
-            self.execute(&opcode);
-
-            let mut new_key;
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                        break 'running      // Specifies which loop to break from
-                    },
-                    Event::KeyDown {keycode: Some(x), .. } => { 
-                        new_key = keys::handle_key_event(&x);
-                        self.keyboard |= new_key;
-                    },
-                    Event::KeyUp {keycode: Some(x), .. } => {
-                        new_key = keys::handle_key_event(&x);
-                        self.keyboard &= !new_key;
-                    },
-                    _ => {}
-                }
-            }
-            // Update the display if needed
-            if self.draw_flag == 1 {
-                canvas.clear();                                                         // Clear the buffer
-                texture.update(None, &(self.display), 64).unwrap();                     // Update texture
-                canvas.copy(&texture, None, Some(Rect::new(0, 0, 64*8, 32*8))).unwrap();   
-                canvas.present();
-                self.draw_flag = 0;
-            }
-            std::thread::sleep(Duration::new(0, 500));        // had :: at the start originally
-        }
-    }
-
-    fn execute(self: &mut Self, op: &Opcode) {
+    pub fn execute(self: &mut Self, opcode: &[u8]) {
 
         let new_time = Instant::now();
         let elasped_time = new_time.duration_since(self.last_time);
@@ -160,6 +80,7 @@ impl Cpu {
             if self.sound_timer > 0 { self.sound_timer -= 1; }
         }
 
+        let op = Opcode::new(&opcode);
         match op.digits[0] {
             0x0 => {
                 match op.digits[1..=3] {

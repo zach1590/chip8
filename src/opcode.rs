@@ -13,9 +13,4 @@ impl Opcode {
             ]
         };
     }
-
-    pub fn display(self: &Self){
-        println!("{:01X}{:01X}{:01X}{:01X}", 
-                    self.digits[0], self.digits[1], self.digits[2], self.digits[3]);
-    }
 }
