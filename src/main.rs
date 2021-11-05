@@ -4,6 +4,7 @@ mod keys;
 mod opcode;
 mod sound;
 
+use std::env;
 use sound::SoundSystem;
 use std::time::{Duration, Instant};
 use sdl2::rect::Rect;
@@ -13,10 +14,18 @@ use sdl2::keyboard::Keycode;
 
 fn main() {
 
-    let filename = "programs/BRIX";
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        panic!("Not enough arguments! What game do you want to play!");
+    }
+    if args.len() > 2 {
+        panic!("Too many arguments!");
+    }
+    let game_name = &args[1];
+    let filename = format!("programs/{}", game_name);
 
     let mut chip8: cpu::Cpu = cpu::Cpu::new();
-    chip8.load_program(filename);
+    chip8.load_program(&filename);
     chip8.load_sprites();
 
     let sdl_context = sdl2::init().unwrap();                        // SDL for graphics, sound and input
@@ -24,7 +33,7 @@ fn main() {
     let mut sound_system = SoundSystem::initialize(&sdl_context);   // Init Sound System
     let mut event_pump = sdl_context.event_pump().unwrap();         // Init Event System
 
-    let window = video_subsystem.window("Rust-Chip8-Emulator", 64*8, 32*8)
+    let window = video_subsystem.window("Rust-Chip8-Interpreter", 64*8, 32*8)
         .position_centered()
         .build()
         .unwrap();

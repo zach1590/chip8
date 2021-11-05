@@ -2,7 +2,6 @@ use sdl2::audio::{AudioCallback, AudioSpecDesired};
 use sdl2::audio::AudioDevice;
 use sdl2::AudioSubsystem;
 use sdl2::Sdl;
-use std::ops::DerefMut;
 
 pub struct SquareWave {
     pub phase_inc: f32,
