@@ -13,3 +13,18 @@ Sound is a little buggy, doesn't play when it should every once in while and the
 This was built on Windows and requires the SDL2.dll file to run
 
 To run, place any programs you have in the `programs/` directory, and type `./chip8.exe <program-name>` into your terminal
+
+## Play
+
+For the user input the following keys were used as the keyboard:
+```
+-----------------
+| 1 | 2 | 3 | 4 |
+|---|---|---|---|
+| Q | W | E | R |
+|---|---|---|---|
+| A | S | D | F |
+|---|---|---|---|
+| Z | X | C | V |
+-----------------
+```

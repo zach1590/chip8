@@ -1,4 +1,4 @@
 Place your games/programs/ROMs in this folder
 
 To run your programs, clone and run using:
-cargo run <Program Name>
+`./chip8.exe <program-name>`
