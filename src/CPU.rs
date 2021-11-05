@@ -83,7 +83,7 @@ impl Cpu {
 
         let new_time = Instant::now();
         let elasped_time = new_time.duration_since(self.last_time);
-        if  elasped_time.as_millis() >= 16 {                      // 1/60hz is 16.6666ms
+        if  elasped_time.as_micros() >= 16600 {                      // 1/60hz is 16.6666ms
             self.last_time = new_time;
             if self.delay_timer > 0 { self.delay_timer -= 1; }
             if self.sound_timer > 0 { self.sound_timer -= 1; }

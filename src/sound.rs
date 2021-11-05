@@ -16,7 +16,7 @@ impl AudioCallback for SquareWave {
     fn callback(&mut self, out: &mut [f32]) {
         // Generate a square wave
         for x in out.iter_mut() {
-            *x = if self.phase <= 0.5 {
+            *x = if self.phase >= 0.5 {
                 self.volume / 100.0
             } else {
                 -self.volume / 100.0
@@ -38,14 +38,14 @@ impl SoundSystem{
         let audio_subsystem = sdl_context.audio().unwrap();
 
         let desired_spec = AudioSpecDesired {
-            freq: Some(41720),  //44100
+            freq: Some(66000),  //44100
             channels: Some(1),  // mono
-            samples: Some(256)       
+            samples: Some(512)       
         };
         let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
             // initialize the audio callback
             SquareWave {
-                phase_inc: 300.0 / spec.freq as f32,  //441
+                phase_inc: 330.0 / spec.freq as f32,  //441
                 phase: 0.0,
                 volume: 0.25,//0.0015,
             }
@@ -60,14 +60,10 @@ impl SoundSystem{
 
     pub fn handle_timer(self: &mut Self, sound_timer: &u8) {
         if *sound_timer > 0 {
-            let mut wave_guard = self.device.lock();
-            let mut wave = wave_guard.deref_mut();
-            wave.volume = 0.25;
+            self.device.resume();
         }
         else {
-            let mut wave_guard = self.device.lock();
-            let mut wave = wave_guard.deref_mut();
-            wave.volume = 0.0;
+            self.device.pause();
         }
     }
 }

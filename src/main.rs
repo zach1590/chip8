@@ -96,6 +96,6 @@ fn main() {
             chip8.draw_flag = 0;
         }
         
-        std::thread::sleep(Duration::new(0, 500));
+        std::thread::sleep(Duration::new(0, 90000)); // previously 500
     }
 }
