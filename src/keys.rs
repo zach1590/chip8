@@ -1,6 +1,6 @@
 use sdl2::keyboard::Keycode;
 
-pub fn handle_key_event(key: &sdl2::keyboard::Keycode) -> u16 {
+pub fn handle_key_event(key: &sdl2::keyboard::Keycode) -> (u16, u8) {
     let shift;
     match key {
         Keycode::Num1 => {
@@ -51,7 +51,7 @@ pub fn handle_key_event(key: &sdl2::keyboard::Keycode) -> u16 {
         Keycode::V => {
             shift = 15;
         },
-        _ => { return 0; }
+        _ => { return (0, 0); }
     }
-    return (1 << shift) as u16;
+    return ((1 << shift) as u16, shift);
 }

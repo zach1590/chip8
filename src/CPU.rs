@@ -13,7 +13,7 @@ pub struct Cpu {
     pub delay_timer: u8,
     pub sound_timer: u8,
     pub keyboard: u16,              // Each bit will represent a key (16 keys)
-    pub waiting_for_key: bool,
+    pub waiting_for_key_flag: bool,
     pub display: [u8; 64 * 32],      // Each byte represent a pixel (Supposed to be 1 bit = 1 pixel)       
     pub draw_flag: u8,              // Do we need to draw on this interation
     pub last_time: Instant,         // Keep track of time for the timers
@@ -31,7 +31,7 @@ impl Cpu {
             delay_timer: 0,
             sound_timer: 0,
             keyboard: 0,
-            waiting_for_key: false,
+            waiting_for_key_flag: false,
             display: [0; 64*32],
             draw_flag: 0,
             last_time: Instant::now(),
@@ -70,11 +70,20 @@ impl Cpu {
         }
     }
 
+    // For when FX0A was called we should end up in this function to take care if it
+    // This function is called once we actually have a keypress to use. The main loop
+    // takes care of pasuing execution to wait for a keypress
+    pub fn key_pressed(self: &mut Self, key_val: u8) {
+        let regx: u8 = self.memory[usize::from(self.program_counter) - 2];  // -2 because we want the fx0a instruction
+        self.registers[usize::from(regx & 0x0F)] = key_val;
+        self.waiting_for_key_flag = false;
+    }
+
     pub fn execute(self: &mut Self, opcode: &[u8]) {
 
         let new_time = Instant::now();
         let elasped_time = new_time.duration_since(self.last_time);
-        if  elasped_time.as_millis() > 16 {                      // 1/60hz is 16.6666ms
+        if  elasped_time.as_millis() >= 16 {                      // 1/60hz is 16.6666ms
             self.last_time = new_time;
             if self.delay_timer > 0 { self.delay_timer -= 1; }
             if self.sound_timer > 0 { self.sound_timer -= 1; }
@@ -289,14 +298,8 @@ impl Cpu {
                     [x, 0x0, 0x7] => {
                         self.registers[usize::from(x)] = self.delay_timer;
                     },
-                    [x, 0x0, 0xA] => {
-                        self.waiting_for_key = true;
-                        if self.waiting_for_key {
-                            let keypress = 0;   // take in a keypress here
-                            self.keyboard = self.keyboard | (0x01 << keypress);
-                            self.registers[usize::from(x)] = 0x01 << keypress;
-                            self.waiting_for_key = false;
-                        }
+                    [_x, 0x0, 0xA] => {
+                        self.waiting_for_key_flag = true;
                     },
                     [x, 0x1, 0x5] => {
                         self.delay_timer = self.registers[usize::from(x)];

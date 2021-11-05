@@ -46,31 +46,47 @@ fn main() {
 
     'running: loop {
 
-        sound_system.handle_timer(&(chip8.sound_timer));
         oparray = [
                 chip8.memory[usize::from(chip8.program_counter)],
                 chip8.memory[usize::from(chip8.program_counter) + 1]
         ];
-        chip8.program_counter += 2;
-        chip8.execute(&oparray);
 
-        let mut new_key;
+        // Program counter is incremented here because if we are waiting for a keypress 
+        // we dont want to incremement it prematurely or we will end eup skipping instructions
+        // In addition it must be before execute as certain instruction modify where the PC is and
+        // they modify it to where they want it rather than the instruction before what they want
+        if !chip8.waiting_for_key_flag {        // If we arent waiting for a keyboard event, 
+            chip8.program_counter += 2;
+            chip8.execute(&oparray);            // we can just execute the next opcode
+        }
+
+        // Handle input events
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running      // Specifies which loop to break from
                 },
                 Event::KeyDown {keycode: Some(x), .. } => { 
-                    new_key = keys::handle_key_event(&x);
+                    let (new_key, shift) = keys::handle_key_event(&x);
                     chip8.keyboard |= new_key;
+
+                    // If we were waiting for a key event due to Fx0A instruction
+                    // We need to finish off the instruction by placing the input key to register[x]
+                    if chip8.waiting_for_key_flag {                      
+                        chip8.key_pressed(shift);
+                    } 
                 },
                 Event::KeyUp {keycode: Some(x), .. } => {
-                    new_key = keys::handle_key_event(&x);
+                    let (new_key, _shift) = keys::handle_key_event(&x);
                     chip8.keyboard &= !new_key;
                 },
                 _ => {}
             }
         }
+
+        // Handle sound
+        sound_system.handle_timer(&(chip8.sound_timer));
+
         // Update the display if needed
         if chip8.draw_flag == 1 {
             canvas.clear();                                                             // Clear the buffer
