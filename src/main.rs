@@ -53,7 +53,7 @@ fn main() {
     chip8.last_time = Instant::now();
     let mut oparray: [u8; 2];
 
-    'running: loop {
+    'running: loop {            // Main loop to run the program and execute instructions
 
         oparray = [
                 chip8.memory[usize::from(chip8.program_counter)],
@@ -75,7 +75,7 @@ fn main() {
                 Event::Quit {..} | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running      // Specifies which loop to break from
                 },
-                Event::KeyDown {keycode: Some(x), .. } => { 
+                Event::KeyDown {keycode: Some(x), .. } => {            // On keydown, set keyboard to 1 in that digit
                     let (new_key, shift) = keys::handle_key_event(&x);
                     chip8.keyboard |= new_key;
 
@@ -85,7 +85,7 @@ fn main() {
                         chip8.key_pressed(shift);
                     } 
                 },
-                Event::KeyUp {keycode: Some(x), .. } => {
+                Event::KeyUp {keycode: Some(x), .. } => {              // On keyup, set keyboard to 0 in that digit
                     let (new_key, _shift) = keys::handle_key_event(&x);
                     chip8.keyboard &= !new_key;
                 },
@@ -93,7 +93,7 @@ fn main() {
             }
         }
 
-        // Handle sound
+        // Play or Pause sound?
         sound_system.handle_timer(&(chip8.sound_timer));
 
         // Update the display if needed

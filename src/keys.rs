@@ -1,5 +1,12 @@
 use sdl2::keyboard::Keycode;
 
+/*
+    Using the following Keys as a Keyboard
+    | 1 | 2 | 3 | 4 |
+    | Q | W | E | R |
+    | A | S | D | F |
+    | Z | X | C | V |
+*/
 pub fn handle_key_event(key: &sdl2::keyboard::Keycode) -> (u16, u8) {
     let shift;
     match key {

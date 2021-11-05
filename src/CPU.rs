@@ -63,7 +63,7 @@ impl Cpu {
     }
 
     pub fn load_program(self: &mut Cpu, file: &str) {
-
+        
         let program_bytes = fs::read(file).unwrap();
         for (i, byte) in (&program_bytes).into_iter().enumerate(){
             self.memory[512 + i] = *byte;
@@ -84,13 +84,13 @@ impl Cpu {
         let new_time = Instant::now();
         let elasped_time = new_time.duration_since(self.last_time);
         if  elasped_time.as_micros() >= 16600 {                      // 1/60hz is 16.6666ms
-            self.last_time = new_time;
+            self.last_time = new_time;                               // decrement timers every 16.6ms
             if self.delay_timer > 0 { self.delay_timer -= 1; }
             if self.sound_timer > 0 { self.sound_timer -= 1; }
         }
 
         let op = Opcode::new(&opcode);
-        match op.digits[0] {
+        match op.digits[0] {                    // Match the instructions with what needs to be executed
             0x0 => {
                 match op.digits[1..=3] {
                     [0x0, 0xE, 0x0] => {

@@ -1,3 +1,9 @@
+/*
+    Most of this is copied from the Rust Bindings for SDL documentation
+    Tried to play around with the values to make sound more consistent
+    Needs Improvement
+*/
+
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
 use sdl2::audio::AudioDevice;
 use sdl2::AudioSubsystem;
