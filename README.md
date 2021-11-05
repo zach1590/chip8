@@ -16,7 +16,7 @@ To run, place any programs you have in the `programs/` directory, and type `./ch
 
 ## Play
 
-For the user input the following keys were used as the keyboard:
+For user input, the following keys were used as a keyboard:
 ```
 -----------------
 | 1 | 2 | 3 | 4 |
